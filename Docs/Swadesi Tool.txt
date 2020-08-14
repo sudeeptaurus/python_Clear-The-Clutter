@@ -1,0 +1,100 @@
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+study("Swadeshi Indicator by Stock Sikshak", shorttitle="SISS")
+rsiP = input(14, minval = 1, title = "RSI")
+bandL = input(31, minval = 1, title = "Band")
+lengMAl = input(2, minval = 0, title = "MA 1")
+lengMA2 = input(9, minval = 1, title = "MA 2")
+src = close                                                             
+r = rsi(src, rsiP)                                                 
+ma = sma(r, bandL)                                                 
+offs = (1.6185 * stdev(r, bandL))                                  
+up = ma + offs                                                       
+dn = ma - offs                                                         
+mid = (up + dn) / 2                                                    
+MA1 = sma(r, lengMAl)                                            
+MA2 = sma(r, lengMA2)                                         
+hline(25)                                                              
+hline(50)                                                              
+hline(75)                                                               
+upp = plot(up, "Upper Band", color = silver)                              
+dw = plot(dn, "Lower Band", color = silver)                              
+cent = plot(mid, "Middle of Bands", color = white, linewidth = 4)     
+plot(MA1, "Slow MA", color=yellow, linewidth=2)                       
+plot(MA2, "Fast MA", color=blue, linewidth=3)                        
+fill(upp, cent, orange, transp=80)                                        
+fill(cent, dw, green, transp=80)     
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//                                  

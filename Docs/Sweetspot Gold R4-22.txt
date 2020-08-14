@@ -1,0 +1,284 @@
+//@version=3
+
+study(title = "Sweetspot Gold R4-22 - by JustUncleL", shorttitle = "SWSPOT R4", overlay = true, precision=5)
+
+
+// Original Author: @JustUncleL
+// Revision:        R4-22
+// Date:            22-Dec-2016
+//
+//
+// Description:
+//  - This revision upgrades "Sweetspot Gold R3"
+//  - This works well for all currency pairs I've tested, most commodities, and most stocks. 
+//  - The indicator plots the so called "round price levels" or "00" levels, which end on 00, 50, 25 etc.
+//    For example, 1.4000, 1.4400, 1.4450.
+//  - It automatically calculates the levels for each chart time frame and sublevels. Or can manually
+//    select main level size (in pips) and/or the number of sub-levels (0, 1, 2, 3, 9)
+//  - Use this indicator as a guidance to a better mapping of Support/Resistance levels on the chart.
+//    Next time you draw Support/Resistance lines, if they coincide with round price levels, especially "00",
+//    you have got a excellent S/R level to work with!
+//
+// === REVISIONS ===
+//
+// 26-Nov-2017
+//  - Changed SubLevel input to an integer options list.
+//  - Minor adjustment to default sublevels.
+//  - Added implied copyright notice.
+//
+// Revision R4:
+//  - Modified code to improve Automatic mode calculations, so now works better with exotic pairs,
+//    Commodities, Indices and Stocks.
+//  - Modified some Automatic level and sublevel selections.
+// Revision R3:
+//  - Added number of sub levels, both auto and manual options.
+//  - Automaically calculate grid size based on chart resolution and asset.
+//  - This revision replaces "Sweetspot Gold2", "Sweetspot Gold4" and "Sweetspot Gold10"
+//
+// Revision R2:
+//  - Fixed bug with displaying commodities
+//
+//
+// -----------------------------------------------------------------------------
+// Copyright 2016 JustUncleL
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// The GNU General Public License can be found here
+// <http://www.gnu.org/licenses/>.
+//
+// -----------------------------------------------------------------------------
+//
+//
+
+// === INPUTS ===
+uAuto      = input(true,title="Use Automatic Main Levels")
+uAutoSub   = input(true,title="Use Automatic Number of Sublevels")
+swLevel_   = input(defval = 100,title = "Sweetspot Main Levels - Pips", minval=1,step=1) * 10
+swSubLvls_ = input(defval = 1,  title = "Number of Sublevels - ", options=[0,1,3,4,9],type=integer)
+avgLen     = input(100, minval=1, title = "Average Level, Period Length")
+// === /INPUTS ===
+
+// === FUNCTIONS ===
+
+// Function to find number of digits in an integer number, thanks to RS.
+f_int_n_digits(_input_value)=>
+    _value = abs(_input_value)
+    _n_digits = 0
+    if _value > 0
+        _n_digits := 1
+    if _value >= 10
+        _n_digits := 2
+    if _value >= 100
+        _n_digits := 3
+    if _value >= 1000
+        _n_digits := 4
+    if _value >= 10000
+        _n_digits := 5
+    if _value >= 100000
+        _n_digits := 6
+    if _value >= 1000000
+        _n_digits := 7
+    if _value >= 10000000
+        _n_digits := 8
+    if _value >= 100000000
+        _n_digits := 9
+    if _value >= 1000000000
+        _n_digits := 10
+    _return = _n_digits
+    
+// === /FUNCTIONS ===
+
+// === CONSTANTS and SERIES ===
+// Select Levels and Sub-Levels based on Time frame.
+swLevel   = not uAuto? swLevel_ : ismonthly ? 10000 : isweekly ? 10000 : isdaily ? 5000 : isintraday ? interval>=240 ? 2000 : interval>=15 ? 1000 : interval>=1 ? 200 : 100 : 1000
+swSubDivs = not uAutoSub?  swSubLvls_+1 : ismonthly ? 2 : isweekly ? 2 : isdaily ? 5 : isintraday ? interval>=60 ? 2 : interval>=15 ? 4 : interval>=1 ? 4 : 2 : 2
+
+
+//
+// Calculate an Average for the centre line.
+ZZ = sum(hl2,avgLen)/avgLen
+
+// How digits in the current price avg.
+dg = f_int_n_digits(round(ZZ[1]))
+
+// get this symbols point tick value, normally 0.01 for JPY and BATS symbols and 0.00001 for the rest.
+point    = syminfo.mintick
+
+// Dynamically adjust the multiplier to the number of digits left of Decimal and point value.
+mul = syminfo.prefix == "BATS" ? dg<=1? 1.0 : 
+      point<0.05 and dg>=2? pow(10,dg-3) : 
+      point<0.5  and dg>=3? pow(10,dg-4) : 
+      point<5.0  and dg>=4? pow(10,dg-5) : 
+      point<50.0 and dg>=5? pow(10,dg-6): 
+      point<500.0 and dg>=6? pow(10,dg-7): 1.0 :
+      dg<=1? 1.0 : 
+      point<0.00005 and dg>=2? pow(10,dg-1) : 
+      point<0.0005 and dg>=3? pow(10,dg-2) : 
+      point<0.005 and dg>=4? pow(10,dg-3) : 
+      point<0.05 and dg>=5? pow(10,dg-4): 
+      point<0.5 and dg>=6? pow(10,dg-5): 1.0
+      
+      
+// -- debugs
+//plotshape(point,location=location.bottom,color=red)
+//plotshape(dg,location=location.bottom,color=red)
+//plotshape(mul,location=location.bottom,color=red)
+
+// Calculate the "00" centre Level and Scale increment
+ZZ_000 = floor((ZZ/(point*swLevel*mul)))*point*swLevel*mul
+INC   = point*swLevel*mul/swSubDivs
+
+// Calculate Main levels 
+ZH_100 = ZZ_000 + INC * swSubDivs
+ZH_200 = ZH_100 + INC * swSubDivs
+ZH_300 = ZH_200 + INC * swSubDivs
+ZH_400 = ZH_300 + INC * swSubDivs
+ZH_500 = ZH_400 + INC * swSubDivs
+ZH_600 = ZH_500 + INC * swSubDivs
+ZH_700 = ZH_600 + INC * swSubDivs
+ZH_800 = ZH_700 + INC * swSubDivs
+ZH_900 = ZH_800 + INC * swSubDivs
+//
+ZL_100 = ZZ_000 - INC * swSubDivs
+ZL_200 = ZL_100 - INC * swSubDivs
+ZL_300 = ZL_200 - INC * swSubDivs
+ZL_400 = ZL_300 - INC * swSubDivs
+ZL_500 = ZL_400 - INC * swSubDivs
+ZL_600 = ZL_500 - INC * swSubDivs
+ZL_700 = ZL_600 - INC * swSubDivs
+ZL_800 = ZL_700 - INC * swSubDivs
+ZL_900 = ZL_800 - INC * swSubDivs
+//
+//
+// Calculate Sub-Levels above zero
+H_001 = ZZ_000 + INC
+H_002 = H_001 + INC
+H_003 = H_002 + INC
+H_004 = H_003 + INC
+H_005 = H_004 + INC
+H_006 = H_005 + INC
+H_007 = H_006 + INC
+H_008 = H_007 + INC
+H_009 = H_008 + INC
+H_010 = H_009 + INC
+H_011 = H_010 + INC
+H_012 = H_011 + INC
+H_013 = H_012 + INC
+H_014 = H_013 + INC
+H_015 = H_014 + INC
+H_016 = H_015 + INC
+H_017 = H_016 + INC
+H_018 = H_017 + INC
+H_019 = H_018 + INC
+H_020 = H_019 + INC
+H_021 = H_020 + INC
+H_022 = H_021 + INC
+
+// Calculate sublevels below zero  
+L_001 = ZZ_000 - INC
+L_002 = L_001 - INC
+L_003 = L_002 - INC
+L_004 = L_003 - INC
+L_005 = L_004 - INC
+L_006 = L_005 - INC
+L_007 = L_006 - INC
+L_008 = L_007 - INC
+L_009 = L_008 - INC
+L_010 = L_009 - INC
+L_011 = L_010 - INC
+L_012 = L_011 - INC
+L_013 = L_012 - INC
+L_014 = L_013 - INC
+L_015 = L_014 - INC
+L_016 = L_015 - INC
+L_017 = L_016 - INC
+L_018 = L_017 - INC
+L_019 = L_018 - INC
+L_020 = L_019 - INC
+L_021 = L_020 - INC
+L_022 = L_021 - INC
+
+// === /CONSTANTS and SERIES ===
+
+// === PLOTTING ===
+
+// Plot the main levels
+plot( ZH_900, title="ZH_900", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_800, title="ZH_800", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_700, title="ZH_700", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_600, title="ZH_600", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_500, title="ZH_500", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_400, title="ZH_400", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_300, title="ZH_300", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_200, title="ZH_200", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZH_100, title="ZH_100", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZZ_000, title="ZZ_000", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_100, title="ZL_100", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_200, title="ZL_200", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_300, title="ZL_300", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_400, title="ZL_400", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_500, title="ZL_500", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_600, title="ZL_600", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_700, title="ZL_700", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_800, title="ZL_800", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+plot( ZL_900, title="ZL_900", color=blue, style=linebr, linewidth=2, transp=60, trackprice = true,offset=-9999)
+
+// Plot all the Sub-levels 
+plot( H_022, title="+22", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_021, title="+21", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_020, title="+20", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_019, title="+19", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_018, title="+18", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_017, title="+17", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_016, title="+16", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_015, title="+15", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_014, title="+14", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_013, title="+13", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_012, title="+12", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_011, title="+11", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_010, title="+10", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_009, title="+09", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_008, title="+08", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_007, title="+07", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_006, title="+06", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_005, title="+05", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_004, title="+04", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_003, title="+03", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_002, title="+02", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( H_001, title="+01", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_001, title="-01", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_002, title="-02", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_003, title="-03", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_004, title="-04", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_005, title="-05", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_006, title="-06", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_007, title="-07", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_008, title="-08", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_009, title="-09", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_010, title="-10", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_011, title="-11", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_012, title="-12", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_013, title="-13", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_014, title="-14", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_015, title="-15", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_016, title="-16", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_017, title="-17", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_018, title="-18", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_019, title="-19", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_020, title="-20", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_021, title="-21", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+plot( L_022, title="-22", color=blue, style=linebr, linewidth=1, transp=40, trackprice = true,offset=-9999)
+
+// === /PLOTTING ===
+
+//
+//eof
